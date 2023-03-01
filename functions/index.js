@@ -1,7 +1,23 @@
 const admin = require('firebase-admin');
 const functions = require('firebase-functions');
+const camelCase = require("lodash/camelCase")
 
 admin.initializeApp();
+
+const camelizeKeys = (obj) => {
+    if (Array.isArray(obj)) {
+        return obj.map(v => camelizeKeys(v));
+    } else if (obj != null && obj.constructor === Object) {
+        return Object.keys(obj).reduce(
+            (result, key) => ({
+                ...result,
+                [camelCase(key)]: camelizeKeys(obj[key]),
+            }),
+            {},
+        );
+    }
+    return obj;
+};
 
 /**
  * This function uses the functions.https.onRequest trigger to listen for incoming HTTP requests. . 
@@ -18,9 +34,11 @@ exports.mpesaStkCallback = functions.https.onRequest((req, res) => {
     const mpesaRef = db.ref(`mpesa/stk/${merchantRequestID}`);
 
     const payload = data.Body.stkCallback
+    let final;
 
     if (resultCode !== 0) {
         payload.Status = "FAILED"
+        final = camelizeKeys(payload)
     } else {
         payload.Status = "SUCCESS"
 
@@ -38,10 +56,12 @@ exports.mpesaStkCallback = functions.https.onRequest((req, res) => {
 
         //remove callback metadata from payload
         delete payload.CallbackMetadata
+
+        final = camelizeKeys(payload)
     }
 
     //Update Mpesa Transaction
-    mpesaRef.update(payload).then(() => {
+    mpesaRef.update(final).then(() => {
         console.log('Transaction saved to Realtime Database:', data);
         res.sendStatus(200);
     }).catch(error => {
